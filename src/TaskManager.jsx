@@ -4,16 +4,30 @@ import { supabase } from './supabaseClient'
 export default function TaskManager({ session }) {
   const [tasks, setTasks] = useState([])
   const [title, setTitle] = useState('')
+  const [error, setError] = useState('')
 
   const fetchTasks = async () => {
+    if (!supabase) return
+
+    setError('')
     const { data } = await supabase
       .from('tasks')
       .select('*')
       .order('created_at', { ascending: false })
-    setTasks(data || [])
+    if (!data) {
+      setTasks([])
+      return
+    }
+
+    setTasks(data)
   }
 
   useEffect(() => {
+    if (!supabase) {
+      setError('Supabase client is not configured.')
+      return
+    }
+
     fetchTasks()
 
     const channel = supabase
@@ -25,17 +39,27 @@ export default function TaskManager({ session }) {
   }, [])
 
   const addTask = async () => {
+    if (!supabase) return
     if (!title.trim()) return
-    await supabase.from('tasks').insert({ title, user_id: session.user.id })
+    const { error } = await supabase.from('tasks').insert({ title, user_id: session.user.id })
+    if (error) {
+      setError(error.message)
+      return
+    }
+
     setTitle('')
   }
 
   const toggleTask = async (task) => {
-    await supabase.from('tasks').update({ is_done: !task.is_done }).eq('id', task.id)
+    if (!supabase) return
+    const { error } = await supabase.from('tasks').update({ is_done: !task.is_done }).eq('id', task.id)
+    if (error) setError(error.message)
   }
 
   const deleteTask = async (id) => {
-    await supabase.from('tasks').delete().eq('id', id)
+    if (!supabase) return
+    const { error } = await supabase.from('tasks').delete().eq('id', id)
+    if (error) setError(error.message)
   }
 
   return (
@@ -58,6 +82,8 @@ export default function TaskManager({ session }) {
           </button>
         </div>
 
+        {error && <p className="text-sm text-red-500 mb-3">{error}</p>}
+
         {tasks.length === 0 && (
           <p className="text-center text-gray-400 text-sm py-8">No tasks yet. Add one above!</p>
         )}
@@ -65,7 +91,7 @@ export default function TaskManager({ session }) {
         <ul className="space-y-2">
           {tasks.map(task => (
             <li key={task.id} className="flex items-center gap-3 p-3 rounded-lg bg-gray-50 group">
-              <input type="checkbox" checked={task.is_done} onChange={() => toggleTask(task)}
+              <input type="checkbox" checked={Boolean(task.is_done)} onChange={() => toggleTask(task)}
                 className="w-4 h-4 accent-indigo-600 cursor-pointer" />
               <span className={`flex-1 text-sm ${task.is_done ? 'line-through text-gray-400' : 'text-gray-700'}`}>
                 {task.title}

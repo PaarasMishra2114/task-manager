@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { supabase } from './supabaseClient'
+import { hasSupabaseEnv, supabase } from './supabaseClient'
 import TaskManager from './TaskManager'
 
 export default function App() {
@@ -10,11 +10,25 @@ export default function App() {
   const [error, setError] = useState('')
 
   useEffect(() => {
+    if (!supabase) {
+      setError('Missing Supabase environment variables. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY, then redeploy/restart.')
+      return
+    }
+
     supabase.auth.getSession().then(({ data: { session } }) => setSession(session))
-    supabase.auth.onAuthStateChange((_event, session) => setSession(session))
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => setSession(session))
+
+    return () => subscription.unsubscribe()
   }, [])
 
   const handleAuth = async () => {
+    if (!supabase) {
+      setError('Supabase is not configured. Check your environment variables.')
+      return
+    }
+
     setError('')
     const fn = isSignup ? supabase.auth.signUp : supabase.auth.signInWithPassword
     const { error } = await fn({ email, password })
@@ -22,6 +36,23 @@ export default function App() {
   }
 
   if (session) return <TaskManager session={session} />
+
+  if (!hasSupabaseEnv) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+        <div className="bg-white p-8 rounded-2xl shadow-md w-full max-w-lg">
+          <h1 className="text-2xl font-semibold mb-3 text-center">Setup required</h1>
+          <p className="text-sm text-gray-700 mb-2">The app is missing Supabase environment variables.</p>
+          <p className="text-sm text-gray-700 mb-2">Add these in Vercel project settings and redeploy:</p>
+          <ul className="text-sm text-gray-700 list-disc pl-5 mb-2">
+            <li>VITE_SUPABASE_URL</li>
+            <li>VITE_SUPABASE_ANON_KEY</li>
+          </ul>
+          <p className="text-sm text-gray-500">If running locally, restart the dev server after updating .env.</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
